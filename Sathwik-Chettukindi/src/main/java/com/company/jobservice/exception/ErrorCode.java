@@ -1,0 +1,16 @@
+package com.company.jobservice.exception;
+
+public enum ErrorCode {
+    VALIDATION_FAILED,
+    INVALID_PARAMS,
+    UNAUTHENTICATED,
+    FORBIDDEN,
+    RULE_NOT_FOUND,
+    NOT_FOUND,
+    METHOD_NOT_ALLOWED,
+    VERSION_CONFLICT,
+    NO_CHANGE,
+    UNSUPPORTED_MEDIA_TYPE,
+    LOCK_TIMEOUT,
+    INTERNAL_ERROR
+}
