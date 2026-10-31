@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS jobs;
+DROP TABLE IF EXISTS rule_versions;
+DROP TABLE IF EXISTS rules;
+DROP TYPE IF EXISTS job_status;
+DROP TYPE IF EXISTS rule_action;
+DROP TYPE IF EXISTS rule_operator;
+DROP TYPE IF EXISTS version_status;

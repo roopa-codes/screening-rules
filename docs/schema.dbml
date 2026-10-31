@@ -1,0 +1,255 @@
+// Screening rules schema. Source of truth is migrations/; keep this file in sync.
+// Paste into https://dbdiagram.io to see the diagram.
+
+// ---------- enums ----------
+
+Enum question_type {
+  TEXT
+  NUMBER
+  BOOLEAN
+  DATE
+  SINGLE_CHOICE
+  MULTI_CHOICE
+}
+
+Enum version_status {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+Enum rule_operator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  BETWEEN
+  IN
+  NOT_IN
+}
+
+Enum rule_action {
+  REJECT
+  REVIEW
+}
+
+Enum job_status {
+  OPEN
+  CLOSED
+}
+
+Enum screening_outcome {
+  PASS
+  REVIEW
+  REJECT
+}
+
+Enum rule_check {
+  PASS
+  FAIL
+  MISSING
+}
+
+// ---------- who can do what ----------
+
+Table roles {
+  id          bigint [pk, increment]
+  name        text   [not null, unique]
+  permissions "text[]" [not null, default: '{}', note: "e.g. {JOB_CREATE,RULES_PUBLISH}"]
+}
+
+Table users {
+  id            bigint      [pk, increment]
+  role_id       bigint      [not null, ref: > roles.id]
+  full_name     text        [not null]
+  email         text        [not null, unique]
+  password_hash text        [not null]
+  is_active     boolean     [not null, default: true]
+  created_at    timestamptz [not null, default: `now()`]
+
+  indexes {
+    role_id
+  }
+}
+
+// ---------- what we ask ----------
+
+Table questions {
+  id         bigint        [pk, increment]
+  text       text          [not null]
+  type       question_type [not null]
+  options    "text[]"      [note: "required for SINGLE_CHOICE / MULTI_CHOICE, empty otherwise"]
+  created_at timestamptz   [not null, default: `now()`]
+}
+
+Table forms {
+  id   bigint [pk, increment]
+  name text   [not null]
+}
+
+Table form_questions {
+  form_id       bigint  [not null, ref: > forms.id]
+  question_id   bigint  [not null, ref: > questions.id]
+  display_order int     [not null]
+  is_required   boolean [not null, default: false]
+
+  indexes {
+    (form_id, question_id) [pk]
+    question_id
+  }
+}
+
+// ---------- rules: one rule per question, each with its own versions ----------
+
+Table rules {
+  Note: "The rule on a question; applies in every form that uses the question. Never changes; what it checks is in rule_versions"
+
+  id          bigint      [pk, increment]
+  question_id bigint      [not null, unique, ref: > questions.id]
+  created_by  bigint      [ref: > users.id]
+  created_at  timestamptz [not null, default: `now()`]
+}
+
+Table rule_versions {
+  Note: "Each edit of a rule is a new version. Only one PUBLISHED version per rule; screening uses that one"
+
+  id           bigint         [pk, increment]
+  rule_id      bigint         [not null, ref: > rules.id]
+  version_no   int            [not null]
+  operator     rule_operator  [not null]
+  value        jsonb          [not null, note: "3 / true / [2, 8] / [\"Hyderabad\", \"Bangalore\"]"]
+  on_fail      rule_action    [not null, default: 'REJECT']
+  on_missing   rule_action    [not null, default: 'REVIEW']
+  status       version_status [not null, default: 'DRAFT']
+  created_by   bigint         [ref: > users.id]
+  created_at   timestamptz    [not null, default: `now()`]
+  published_at timestamptz
+
+  indexes {
+    (rule_id, version_no) [unique]
+  }
+}
+
+// ---------- jobs ----------
+
+Table jobs {
+  Note: "Rules come from the form: job -> form -> form_questions -> rules -> each rule's PUBLISHED version"
+
+  id         bigint      [pk, increment]
+  title      text        [not null]
+  form_id    bigint      [not null, ref: > forms.id]
+  status     job_status  [not null, default: 'OPEN']
+  created_by bigint      [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    form_id
+    status
+  }
+}
+
+// ---------- what the candidate sends ----------
+
+Table candidates {
+  id         bigint      [pk, increment]
+  full_name  text        [not null]
+  email      text        [not null, unique]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table applications {
+  id            bigint            [pk, increment]
+  job_id        bigint            [not null, ref: > jobs.id]
+  candidate_id  bigint            [not null, ref: > candidates.id]
+  final_outcome screening_outcome
+  submitted_at  timestamptz       [not null, default: `now()`]
+
+  indexes {
+    (job_id, candidate_id) [unique]
+    (job_id, final_outcome)
+    candidate_id
+  }
+}
+
+Table application_answers {
+  Note: "Exactly one value column is filled, chosen by questions.type"
+
+  id             bigint      [pk, increment]
+  application_id bigint      [not null, ref: > applications.id]
+  question_id    bigint      [not null, ref: > questions.id]
+  text_value     text        [note: "TEXT"]
+  number_value   numeric     [note: "NUMBER"]
+  bool_value     boolean     [note: "BOOLEAN"]
+  date_value     date        [note: "DATE"]
+  choice_values  "text[]"    [note: "SINGLE_CHOICE / MULTI_CHOICE"]
+  answered_at    timestamptz [not null, default: `now()`]
+
+  indexes {
+    (application_id, question_id) [unique]
+    question_id
+  }
+}
+
+// ---------- the result ----------
+
+Table screening_evaluations {
+  id             bigint            [pk, increment]
+  application_id bigint            [not null, ref: > applications.id]
+  outcome        screening_outcome [not null]
+  is_current     boolean           [not null, default: true, note: "only one current per application"]
+  evaluated_at   timestamptz       [not null, default: `now()`]
+
+  indexes {
+    application_id
+  }
+}
+
+Table rule_results {
+  Note: "One row per rule checked, pointing at the exact rule version used"
+
+  id              bigint     [pk, increment]
+  evaluation_id   bigint     [not null, ref: > screening_evaluations.id]
+  rule_version_id bigint     [not null, ref: > rule_versions.id]
+  result          rule_check [not null]
+  reason          text       [not null]
+
+  indexes {
+    (evaluation_id, rule_version_id) [unique]
+    rule_version_id
+  }
+}
+
+Table overrides {
+  id             bigint            [pk, increment]
+  application_id bigint            [not null, ref: > applications.id]
+  evaluation_id  bigint            [not null, ref: > screening_evaluations.id]
+  from_outcome   screening_outcome [not null]
+  to_outcome     screening_outcome [not null]
+  comment        text              [not null]
+  overridden_by  bigint            [not null, ref: > users.id]
+  is_active      boolean           [not null, default: true, note: "only one active per application"]
+  created_at     timestamptz       [not null, default: `now()`]
+
+  indexes {
+    evaluation_id
+  }
+}
+
+// ---------- history ----------
+
+Table audit_logs {
+  id            bigint      [pk, increment]
+  actor_user_id bigint      [ref: > users.id]
+  action        text        [not null]
+  entity_type   text        [not null]
+  entity_id     bigint      [not null]
+  before_data   jsonb
+  after_data    jsonb
+  created_at    timestamptz [not null, default: `now()`]
+
+  indexes {
+    (entity_type, entity_id)
+  }
+}
