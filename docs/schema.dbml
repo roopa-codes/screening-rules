@@ -113,19 +113,16 @@ Table rules {
 }
 
 Table rule_versions {
-  Note: "Each edit of a rule is a new version. Only one PUBLISHED version per rule; screening uses that one"
+  Note: "Each edit of a rule is a new version. Only one PUBLISHED version per rule; screening uses that one. on_fail also applies when the answer is missing"
 
-  id           bigint         [pk, increment]
-  rule_id      bigint         [not null, ref: > rules.id]
-  version_no   int            [not null]
-  operator     rule_operator  [not null]
-  value        jsonb          [not null, note: "3 / true / [2, 8] / [\"Hyderabad\", \"Bangalore\"]"]
-  on_fail      rule_action    [not null, default: 'REJECT']
-  on_missing   rule_action    [not null, default: 'REVIEW']
-  status       version_status [not null, default: 'DRAFT']
-  created_by   bigint         [ref: > users.id]
-  created_at   timestamptz    [not null, default: `now()`]
-  published_at timestamptz
+  id         bigint         [pk, increment]
+  rule_id    bigint         [not null, ref: > rules.id]
+  version_no int            [not null]
+  operator   rule_operator  [not null]
+  value      jsonb          [not null, note: "3 / true / [2, 8] / [\"Hyderabad\", \"Bangalore\"]"]
+  on_fail    rule_action    [not null, default: 'REJECT']
+  status     version_status [not null, default: 'DRAFT']
+  created_at timestamptz    [not null, default: `now()`]
 
   indexes {
     (rule_id, version_no) [unique]

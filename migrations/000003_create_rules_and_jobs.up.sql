@@ -22,18 +22,17 @@ CREATE TABLE rules (
 
 -- Each edit of a rule is a new version. A published version is never changed:
 -- add the next version_no, publish it, and archive the old one.
+-- If the answer fails the check or is missing, on_fail decides the outcome.
+-- Who made each change is recorded in audit_logs.
 CREATE TABLE rule_versions (
-    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    rule_id      BIGINT         NOT NULL REFERENCES rules (id) ON DELETE CASCADE,
-    version_no   INT            NOT NULL,
-    operator     rule_operator  NOT NULL,
-    value        JSONB          NOT NULL,
-    on_fail      rule_action    NOT NULL DEFAULT 'REJECT',
-    on_missing   rule_action    NOT NULL DEFAULT 'REVIEW',
-    status       version_status NOT NULL DEFAULT 'DRAFT',
-    created_by   BIGINT         REFERENCES users (id) ON DELETE SET NULL,
-    created_at   TIMESTAMPTZ    NOT NULL DEFAULT now(),
-    published_at TIMESTAMPTZ,
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    rule_id    BIGINT         NOT NULL REFERENCES rules (id) ON DELETE CASCADE,
+    version_no INT            NOT NULL,
+    operator   rule_operator  NOT NULL,
+    value      JSONB          NOT NULL,
+    on_fail    rule_action    NOT NULL DEFAULT 'REJECT',
+    status     version_status NOT NULL DEFAULT 'DRAFT',
+    created_at TIMESTAMPTZ    NOT NULL DEFAULT now(),
     UNIQUE (rule_id, version_no)
 );
 
